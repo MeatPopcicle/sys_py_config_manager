@@ -1,13 +1,13 @@
 [tool.poetry]
-name = "config-manager"
-version = "0.1.0"
+name = "py-config-manager"
+version = "1.0.0"
 description = "A flexible and type-safe configuration management library for Python applications"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Config Manager Contributors"]
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/yourusername/config-manager"
-repository = "https://github.com/yourusername/config-manager"
-documentation = "https://github.com/yourusername/config-manager/blob/main/README.md"
+homepage = "https://github.com/py-config-manager/py-config-manager"
+repository = "https://github.com/py-config-manager/py-config-manager"
+documentation = "https://github.com/py-config-manager/py-config-manager/blob/main/README.md"
 keywords = ["config", "configuration", "settings", "environment", "yaml", "json", "toml"]
 classifiers = [
     "Development Status :: 4 - Beta",

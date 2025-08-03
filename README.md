@@ -16,13 +16,13 @@ A flexible and type-safe configuration management library for Python application
 ## Installation
 
 ```bash
-pip install config-manager
+pip install py-config-manager
 ```
 
 Or using Poetry:
 
 ```bash
-poetry add config-manager
+poetry add py-config-manager
 ```
 
 ## Quick Start
