@@ -1,176 +1,200 @@
-# Config Manager
+# py-config-manager
 
-A flexible and type-safe configuration management library for Python applications.
+A standalone, reusable configuration management system for Python applications.
 
 ## Features
 
-- **Type Safety**: Built on Pydantic for automatic validation and type checking
-- **Multiple Formats**: Support for YAML, JSON, TOML, and environment files
-- **Environment Variable Override**: Override any configuration value with environment variables
-- **Nested Configuration**: Support for deeply nested configuration structures
-- **Validation**: Built-in and custom validators for configuration values
-- **Auto-reload**: Watch configuration files for changes and reload automatically
-- **Secret Management**: Mark fields as secrets to prevent logging
-- **Multiple Environments**: Easy management of development, staging, and production configs
+- **TOML Configuration**: Load configuration from TOML files with nested structures
+- **Environment Variable Override**: Override any configuration value with environment variables using dot notation
+- **Type Validation**: Automatic type validation and coercion for configuration values
+- **Schema Validation**: Define configuration schemas with defaults and required fields
+- **Multi-source Configuration**: Merge configuration from multiple TOML files and environment variables
+- **Runtime Updates**: Dynamically update configuration values at runtime
+- **Source Tracking**: Track where each configuration value originated from
+- **Nested Access**: Access nested configuration values using dot notation
 
 ## Installation
 
-```bash
-pip install py-config-manager
-```
-
-Or using Poetry:
-
-```bash
-poetry add py-config-manager
-```
+This is currently a standalone module. Copy the `config_manager` package into your project.
 
 ## Quick Start
 
 ```python
-from config_manager import ConfigManager, ConfigField
-from pydantic import BaseModel
+from config_manager import ConfigManager, ConfigSchema
 
-class DatabaseConfig(BaseModel):
-    host: str = ConfigField(default="localhost", env="DB_HOST")
-    port: int = ConfigField(default=5432, env="DB_PORT")
-    username: str = ConfigField(env="DB_USER")
-    password: str = ConfigField(env="DB_PASSWORD", secret=True)
+# Define your configuration schema
+schema = ConfigSchema()
+schema.add_field("debug", bool, default=False)
+schema.add_field("host", str, default="localhost")
+schema.add_field("port", int, default=8080)
 
-class AppConfig(BaseModel):
-    app_name: str = "My Application"
-    debug: bool = ConfigField(default=False, env="DEBUG")
-    database: DatabaseConfig = DatabaseConfig()
+# Define nested database configuration
+db_schema = ConfigSchema()
+db_schema.add_field("host", str, default="localhost")
+db_schema.add_field("port", int, default=5432)
+db_schema.add_field("name", str, required=True)
+db_schema.add_field("user", str, required=True)
+schema.add_nested_schema("database", db_schema)
 
-# Load configuration
-config_manager = ConfigManager(AppConfig)
-config = config_manager.load_config(
-    config_files=["config.yaml", ".env"],
-    validate=True
+# Create config manager
+config_manager = ConfigManager(
+    config_paths=["config.toml"],
+    env_prefix="MYAPP",
+    schema=schema
 )
 
-# Access configuration values
-print(config.app_name)
-print(config.database.host)
+# Load configuration
+config = config_manager.load()
+
+# Access values
+print(f"Debug mode: {config_manager.get('debug')}")
+print(f"Server: {config_manager.get('host')}:{config_manager.get('port')}")
+print(f"Database: {config_manager.get('database.host')}")
 ```
 
 ## Configuration Sources
 
 Config Manager supports multiple configuration sources with the following precedence (highest to lowest):
 
-1. Environment variables
-2. Configuration files (in the order they are specified)
-3. Default values
+1. Environment variables (with prefix)
+2. Configuration files (merged in order specified)
+3. Schema defaults
 
 ### Supported File Formats
 
-- **YAML** (`.yaml`, `.yml`)
-- **JSON** (`.json`)
-- **TOML** (`.toml`)
-- **Environment files** (`.env`)
+- **TOML** (`.toml`) - Primary supported format
+- **Environment variables** - With configurable prefix
+
+**Note**: YAML and JSON support are not currently implemented.
+
+### Environment Variable Naming
+
+Environment variables use the following naming convention:
+- Top-level fields: `{PREFIX}_{FIELD_NAME}`
+- Nested fields: `{PREFIX}_{SECTION}__{FIELD_NAME}`
+
+Example:
+```bash
+# For prefix "MYAPP"
+export MYAPP_DEBUG=true
+export MYAPP_PORT=9000
+export MYAPP_DATABASE__HOST=prod-db.example.com
+export MYAPP_DATABASE__USER=produser
+```
+
+## Configuration File Example
+
+```toml
+# config.toml
+debug = false
+host = "0.0.0.0"
+port = 8080
+
+[database]
+host = "db.example.com"
+port = 5432
+name = "myapp"
+user = "appuser"
+
+[cache]
+enabled = true
+ttl = 300
+```
 
 ## Advanced Usage
 
-### Custom Validators
+### Multiple Configuration Files
 
 ```python
-from config_manager import ConfigField, validator
-
-class AppConfig(BaseModel):
-    port: int = ConfigField(default=8000, env="PORT")
-    
-    @validator("port")
-    def validate_port(cls, v):
-        if not 1 <= v <= 65535:
-            raise ValueError("Port must be between 1 and 65535")
-        return v
-```
-
-### Nested Configuration with Environment Variables
-
-```python
-class RedisConfig(BaseModel):
-    host: str = ConfigField(default="localhost", env="REDIS_HOST")
-    port: int = ConfigField(default=6379, env="REDIS_PORT")
-
-class CacheConfig(BaseModel):
-    enabled: bool = ConfigField(default=True, env="CACHE_ENABLED")
-    ttl: int = ConfigField(default=300, env="CACHE_TTL")
-    redis: RedisConfig = RedisConfig()
-
-# Environment variables:
-# CACHE_ENABLED=true
-# CACHE_TTL=600
-# REDIS_HOST=redis.example.com
-# REDIS_PORT=6380
-```
-
-### Configuration Reloading
-
-```python
-config_manager = ConfigManager(AppConfig)
-
-# Enable auto-reload
-config = config_manager.load_config(
-    config_files=["config.yaml"],
-    watch=True,
-    reload_callback=lambda new_config: print("Config reloaded!")
+# Load from multiple TOML files (merged in order)
+config_manager = ConfigManager(
+    config_paths=[
+        "config/default.toml",
+        "config/production.toml"
+    ],
+    env_prefix="MYAPP",
+    schema=schema
 )
 ```
 
-### Multiple Environments
+### Runtime Configuration Updates
 
 ```python
-import os
+# Update configuration at runtime
+config_manager.set("debug", True)
+config_manager.set("database.host", "new-db.example.com")
 
-env = os.getenv("APP_ENV", "development")
+# Check if key exists
+if config_manager.has("feature_flags.new_feature"):
+    print("New feature is configured")
 
-config = config_manager.load_config(
-    config_files=[
-        "config/default.yaml",
-        f"config/{env}.yaml"
-    ]
-)
+# Get source of configuration value
+source = config_manager.get_source("database.host")
+print(f"database.host loaded from: {source}")
+```
+
+### Custom Validation
+
+```python
+from config_manager import ConfigError
+
+def validate_port(port):
+    if not 1 <= port <= 65535:
+        raise ConfigError(f"Port {port} is out of valid range")
+    return port
+
+# Apply validation after loading
+config = config_manager.load()
+validated_port = validate_port(config_manager.get("port"))
+config_manager.set("port", validated_port)
 ```
 
 ## API Reference
 
 ### ConfigManager
 
-The main class for managing configurations.
+**Constructor:**
+```python
+ConfigManager(config_paths=None, env_prefix=None, schema=None, auto_load=True)
+```
+
+**Key Methods:**
+- `load()` - Load configuration from all sources
+- `get(key, default=None)` - Get configuration value (supports dot notation)
+- `set(key, value)` - Set configuration value (supports dot notation)
+- `has(key)` - Check if configuration key exists
+- `get_source(key)` - Get source where value was loaded from
+- `to_dict()` - Export configuration as dictionary
+
+### ConfigSchema
 
 **Methods:**
-- `load_config(config_files, validate=True, watch=False, reload_callback=None)`: Load configuration from files
-- `validate_config(config)`: Validate a configuration object
-- `to_dict(config, include_secrets=False)`: Convert config to dictionary
-- `save_config(config, filepath, format=None)`: Save configuration to file
+- `add_field(name, field_type, default=None, required=False)` - Add a field to schema
+- `add_nested_schema(name, nested_schema)` - Add nested schema section
 
-### ConfigField
+### Type Conversion
 
-A Pydantic field with additional configuration management features.
+Automatic type conversion is supported for:
+- `bool`: "true", "1", "yes", "on" → True; "false", "0", "no", "off" → False
+- `int`: Numeric strings → integers
+- `float`: Numeric strings → floats  
+- `list`: Comma-separated values → list
 
-**Parameters:**
-- `default`: Default value for the field
-- `env`: Environment variable name to override this field
-- `secret`: Mark field as secret (won't be included in logs/exports)
-- `description`: Field description for documentation
-- All standard Pydantic field parameters
+## Error Handling
+
+```python
+from config_manager import ConfigError
+
+try:
+    config = config_manager.load()
+except ConfigError as e:
+    print(f"Configuration error: {e}")
+```
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+This is a standalone module designed to be copied into projects. Improvements and bug fixes are welcome.
 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- Built on top of [Pydantic](https://pydantic-docs.helpmanual.io/)
-- Inspired by various configuration management best practices in the Python ecosystem

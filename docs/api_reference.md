@@ -11,341 +11,334 @@ from config_manager import ConfigManager
 ### Constructor
 
 ```python
-ConfigManager(config_class: Type[BaseModel])
-```
-
-**Parameters:**
-- `config_class`: A Pydantic model class that defines your configuration schema
-
-### Methods
-
-#### load_config
-
-```python
-load_config(
-    config_files: List[Union[str, Path]] = None,
-    config_dict: Dict[str, Any] = None,
-    validate: bool = True,
-    watch: bool = False,
-    reload_callback: Callable[[BaseModel], None] = None
-) -> BaseModel
-```
-
-Load configuration from multiple sources.
-
-**Parameters:**
-- `config_files`: List of configuration file paths to load (optional)
-- `config_dict`: Dictionary of configuration values (optional)
-- `validate`: Whether to validate the configuration (default: True)
-- `watch`: Enable file watching for auto-reload (default: False)
-- `reload_callback`: Function to call when configuration is reloaded
-
-**Returns:**
-- Configured instance of your config class
-
-**Example:**
-```python
-config = config_manager.load_config(
-    config_files=["config.yaml", ".env"],
-    validate=True
+ConfigManager(
+    config_paths=None,
+    env_prefix=None,
+    schema=None,
+    auto_load=True
 )
 ```
 
-#### validate_config
+**Parameters:**
+- `config_paths`: List of configuration file paths to load (optional)
+- `env_prefix`: Prefix for environment variables (optional)
+- `schema`: ConfigSchema instance defining the configuration structure (optional)
+- `auto_load`: Whether to automatically load configuration on initialization (default: True)
+
+### Methods
+
+#### load
 
 ```python
-validate_config(config: BaseModel) -> None
+load() -> dict
 ```
 
-Validate a configuration object.
+Load configuration from all configured sources (files and environment variables).
+
+**Returns:**
+- Dictionary containing the merged configuration
+
+**Example:**
+```python
+config = config_manager.load()
+```
+
+#### get
+
+```python
+get(key: str, default=None) -> Any
+```
+
+Get a configuration value by key. Supports dot notation for nested values.
 
 **Parameters:**
-- `config`: Configuration object to validate
+- `key`: Configuration key (supports dot notation like "database.host")
+- `default`: Default value if key is not found
 
-**Raises:**
-- `ValidationError`: If configuration is invalid
+**Returns:**
+- Configuration value or default
+
+**Example:**
+```python
+debug = config_manager.get("debug", False)
+db_host = config_manager.get("database.host", "localhost")
+```
+
+#### set
+
+```python
+set(key: str, value: Any, source: str = "runtime") -> None
+```
+
+Set a configuration value by key. Supports dot notation for nested values.
+
+**Parameters:**
+- `key`: Configuration key (supports dot notation)
+- `value`: Value to set
+- `source`: Source identifier for tracking (default: "runtime")
+
+**Example:**
+```python
+config_manager.set("debug", True)
+config_manager.set("database.host", "prod-db.example.com")
+config_manager.set("api_key", "secret123", source="manual_override")
+```
+
+#### has
+
+```python
+has(key: str) -> bool
+```
+
+Check if a configuration key exists.
+
+**Parameters:**
+- `key`: Configuration key (supports dot notation)
+
+**Returns:**
+- True if key exists, False otherwise
+
+**Example:**
+```python
+if config_manager.has("feature_flags.new_feature"):
+    print("New feature is enabled")
+```
+
+#### get_source
+
+```python
+get_source(key: str) -> Optional[str]
+```
+
+Get the source where a configuration value was loaded from.
+
+**Parameters:**
+- `key`: Configuration key
+
+**Returns:**
+- Source identifier (e.g., "config.toml", "environment", "schema_default") or None if key doesn't exist
+
+**Example:**
+```python
+source = config_manager.get_source("database.host")
+if source:
+    print(f"database.host was loaded from: {source}")
+else:
+    print("database.host not found")
+```
 
 #### to_dict
 
 ```python
-to_dict(
-    config: BaseModel,
-    include_secrets: bool = False,
-    exclude_none: bool = True
-) -> Dict[str, Any]
+to_dict() -> Dict[str, Any]
 ```
 
-Convert configuration to dictionary.
-
-**Parameters:**
-- `config`: Configuration object
-- `include_secrets`: Include fields marked as secrets (default: False)
-- `exclude_none`: Exclude fields with None values (default: True)
+Convert the entire configuration to a dictionary.
 
 **Returns:**
-- Dictionary representation of configuration
+- Dictionary representation of the configuration
 
-#### save_config
+#### add_config_path
 
 ```python
-save_config(
-    config: BaseModel,
-    filepath: Union[str, Path],
-    format: str = None,
-    include_secrets: bool = False
+add_config_path(path: Union[str, Path]) -> None
+```
+
+Add a configuration file path to the search list.
+
+**Parameters:**
+- `path`: Path to configuration file to add
+
+**Example:**
+```python
+config_manager.add_config_path("additional_config.toml")
+config_manager.add_config_path(Path("configs/override.toml"))
+```
+
+## ConfigSchema
+
+Class for defining configuration schemas with type validation and defaults.
+
+```python
+from config_manager import ConfigSchema
+```
+
+### Constructor
+
+```python
+ConfigSchema()
+```
+
+### Methods
+
+#### add_field
+
+```python
+add_field(
+    name: str,
+    field_type: type,
+    default=None,
+    required: bool = False
 ) -> None
 ```
 
-Save configuration to file.
+Add a field to the schema.
 
 **Parameters:**
-- `config`: Configuration object to save
-- `filepath`: Path where to save the configuration
-- `format`: File format (yaml, json, toml). If None, inferred from extension
-- `include_secrets`: Include secret fields in saved file (default: False)
-
-## ConfigField
-
-Enhanced Pydantic field for configuration management.
-
-```python
-from config_manager import ConfigField
-```
-
-### Function Signature
-
-```python
-ConfigField(
-    default: Any = PydanticUndefined,
-    *,
-    env: str = None,
-    secret: bool = False,
-    description: str = None,
-    **kwargs
-)
-```
-
-**Parameters:**
+- `name`: Field name
+- `field_type`: Python type for the field (str, int, bool, list, dict, etc.)
 - `default`: Default value for the field
-- `env`: Environment variable name to read value from
-- `secret`: Mark field as containing sensitive data
-- `description`: Field description
-- `**kwargs`: All other Pydantic Field parameters
+- `required`: Whether the field is required
 
 **Example:**
 ```python
-class Config(BaseModel):
-    api_key: str = ConfigField(env="API_KEY", secret=True)
-    port: int = ConfigField(default=8000, env="PORT", description="Server port")
+schema = ConfigSchema()
+schema.add_field("debug", bool, default=False)
+schema.add_field("port", int, default=8080)
+schema.add_field("api_key", str, required=True)
 ```
 
-## Configuration Classes
-
-### BaseConfigModel
-
-Base class for configuration models with additional features.
+#### add_nested_schema
 
 ```python
-from config_manager import BaseConfigModel
+add_nested_schema(name: str, nested_schema: ConfigSchema) -> None
 ```
 
-**Features:**
-- Automatic environment variable loading
-- Nested configuration support
-- Custom validation methods
+Add a nested schema for complex configuration structures.
+
+**Parameters:**
+- `name`: Name of the nested section
+- `nested_schema`: ConfigSchema instance for the nested section
 
 **Example:**
 ```python
-class MyConfig(BaseConfigModel):
-    app_name: str
-    debug: bool = False
-    
-    class Config:
-        env_prefix = "MYAPP_"  # Prefix for environment variables
-```
+db_schema = ConfigSchema()
+db_schema.add_field("host", str, default="localhost")
+db_schema.add_field("port", int, default=5432)
 
-## Validators
-
-### Built-in Validators
-
-#### validate_url
-
-```python
-from config_manager.validators import validate_url
-
-class Config(BaseModel):
-    api_url: str = ConfigField()
-    
-    @validator("api_url")
-    def validate_api_url(cls, v):
-        return validate_url(v)
-```
-
-#### validate_port
-
-```python
-from config_manager.validators import validate_port
-
-class Config(BaseModel):
-    port: int = ConfigField(default=8000)
-    
-    @validator("port")
-    def validate_port_number(cls, v):
-        return validate_port(v)
-```
-
-#### validate_email
-
-```python
-from config_manager.validators import validate_email
-
-class Config(BaseModel):
-    admin_email: str = ConfigField()
-    
-    @validator("admin_email")
-    def validate_admin_email(cls, v):
-        return validate_email(v)
-```
-
-### Custom Validators
-
-You can create custom validators using Pydantic's validator decorator:
-
-```python
-from pydantic import validator
-
-class Config(BaseModel):
-    percentage: float = ConfigField()
-    
-    @validator("percentage")
-    def validate_percentage(cls, v):
-        if not 0 <= v <= 100:
-            raise ValueError("Percentage must be between 0 and 100")
-        return v
+main_schema = ConfigSchema()
+main_schema.add_nested_schema("database", db_schema)
 ```
 
 ## Loaders
-
-### FileLoader
-
-Base class for file loaders.
-
-```python
-from config_manager.loaders import FileLoader
-```
-
-### YAMLLoader
-
-Load configuration from YAML files.
-
-```python
-from config_manager.loaders import YAMLLoader
-
-loader = YAMLLoader()
-config_dict = loader.load("config.yaml")
-```
-
-### JSONLoader
-
-Load configuration from JSON files.
-
-```python
-from config_manager.loaders import JSONLoader
-
-loader = JSONLoader()
-config_dict = loader.load("config.json")
-```
 
 ### TOMLLoader
 
 Load configuration from TOML files.
 
 ```python
-from config_manager.loaders import TOMLLoader
+from config_manager import TOMLLoader
 
 loader = TOMLLoader()
 config_dict = loader.load("config.toml")
 ```
 
+**Methods:**
+- `load(file_path: Path) -> Dict[str, Any]`: Load configuration from a TOML file
+
 ### EnvLoader
 
-Load configuration from environment files.
+Load configuration from environment variables.
 
 ```python
-from config_manager.loaders import EnvLoader
+from config_manager import EnvLoader
 
-loader = EnvLoader()
-config_dict = loader.load(".env")
+loader = EnvLoader(prefix="MYAPP")
+config_dict = loader.load()
 ```
+
+**Constructor Parameters:**
+- `prefix`: Environment variable prefix (optional)
+
+**Methods:**
+- `load() -> dict`: Load configuration from environment variables
+
+## Validators
+
+### TypeValidator
+
+Validates and converts values to specified types.
+
+```python
+from config_manager import TypeValidator
+
+validator = TypeValidator()
+value = validator.validate_type("8080", int)  # Returns 8080 as int
+```
+
+**Methods:**
+- `validate_type(value: Any, expected_type: Type) -> Any`: Convert value to expected type
+
+### SchemaValidator
+
+Validates configuration against a schema.
+
+```python
+from config_manager import SchemaValidator
+
+validator = SchemaValidator()
+validated_config = validator.validate(config_dict, schema)
+```
+
+**Constructor Parameters:**
+- None (parameterless constructor)
+
+**Methods:**
+- `validate(config: Dict[str, Any], schema: ConfigSchema) -> Dict[str, Any]`: Validate configuration against schema and return validated config
 
 ## Exceptions
 
-### ConfigurationError
+### ConfigError
 
 Base exception for configuration errors.
 
 ```python
-from config_manager import ConfigurationError
+from config_manager import ConfigError
 
 try:
-    config = config_manager.load_config(["config.yaml"])
-except ConfigurationError as e:
+    config = config_manager.load()
+except ConfigError as e:
     print(f"Configuration error: {e}")
-```
-
-### ValidationError
-
-Raised when configuration validation fails.
-
-```python
-from config_manager import ValidationError
-
-try:
-    config = config_manager.validate_config(config_obj)
-except ValidationError as e:
-    print(f"Validation error: {e}")
 ```
 
 ## Environment Variable Resolution
 
-Environment variables are resolved in the following order:
+Environment variables are resolved with the following naming convention:
 
-1. Direct environment variable (if `env` is specified in ConfigField)
-2. Prefixed environment variable (if `env_prefix` is set in Config class)
-3. Default value
-4. Required field validation
+1. For top-level fields: `{PREFIX}_{FIELD_NAME}`
+2. For nested fields: `{PREFIX}_{SECTION}__{FIELD_NAME}`
 
 **Example:**
 ```python
-class DatabaseConfig(BaseModel):
-    host: str = ConfigField(env="DB_HOST", default="localhost")
-    port: int = ConfigField(env="DB_PORT", default=5432)
-    
-    class Config:
-        env_prefix = "MYAPP_"
-
-# These environment variables will be checked:
-# 1. DB_HOST (direct)
-# 2. MYAPP_DB_HOST (prefixed)
-# 3. "localhost" (default)
+# With prefix "MYAPP"
+# config.debug -> MYAPP_DEBUG
+# config.database.host -> MYAPP_DATABASE__HOST
+# config.database.port -> MYAPP_DATABASE__PORT
 ```
 
 ## Type Conversions
 
-Config Manager automatically converts string values from environment variables and config files to the appropriate Python types:
+The TypeValidator automatically converts string values from environment variables and config files:
 
 - `bool`: "true", "1", "yes", "on" → True; "false", "0", "no", "off" → False
 - `int`: Numeric strings → integers
 - `float`: Numeric strings → floats
 - `list`: Comma-separated values → list
-- `dict`: JSON strings → dictionaries
+- `dict`: Not supported via environment variables
 
 **Example:**
-```python
-# Environment: DEBUG=true PORT=8080 FEATURES=auth,api,admin
-
-class Config(BaseModel):
-    debug: bool = ConfigField(env="DEBUG")  # True
-    port: int = ConfigField(env="PORT")     # 8080
-    features: List[str] = ConfigField(env="FEATURES")  # ["auth", "api", "admin"]
+```bash
+# Environment variables
+export MYAPP_DEBUG=true
+export MYAPP_PORT=8080
+export MYAPP_ALLOWED_HOSTS=localhost,example.com
 ```
+
+## File Format Support
+
+Currently supported configuration file formats:
+
+- **TOML**: `.toml` files using the TOMLLoader
+- **Environment**: Environment variables using the EnvLoader
+
+**Note**: YAML and JSON loaders are not currently implemented.
